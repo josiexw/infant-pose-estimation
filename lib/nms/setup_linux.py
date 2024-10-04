@@ -11,6 +11,7 @@ from setuptools import setup
 from distutils.extension import Extension
 from Cython.Distutils import build_ext
 import numpy as np
+from Cython.Build import cythonize
 
 
 def find_in_path(name, path):
@@ -41,7 +42,8 @@ def locate_cuda():
         'home': cuda_home,
         'nvcc': nvcc,
         'include': os.path.join(cuda_home, 'include'),
-        'lib64': os.path.join(cuda_home, 'lib64')
+        'lib64': os.path.join(cuda_home, 'lib64'),
+        'lib': pjoin(cuda_home, 'lib')
     }
 
 
@@ -55,20 +57,17 @@ except AttributeError:
 
 
 def customize_compiler_for_nvcc(self):
-    """Customize how the dispatch to nvcc works."""
     self.src_extensions.append('.cu')
-
     super_compile = self._compile
 
     def _compile(obj, src, ext, cc_args, extra_postargs, pp_opts):
         if os.path.splitext(src)[1] == '.cu':
-            self.set_executable('compiler_cxx', CUDA['nvcc'])  # Use compiler_cxx for nvcc
+            self.set_executable('compiler_so', CUDA['nvcc'])
             postargs = extra_postargs['nvcc']
         else:
             postargs = extra_postargs['gcc']
-
         super_compile(obj, src, ext, cc_args, postargs, pp_opts)
-
+    
     self._compile = _compile
 
 
@@ -82,22 +81,22 @@ ext_modules = [
     Extension(
         "cpu_nms",
         ["cpu_nms.pyx"],
-        extra_compile_args={'gcc': ["/W3", "/wd4244"],  # Disable warning for possible data loss
+        extra_compile_args={'gcc': ['-Wno-cpp', '-Wno-unused-function'] + ['-O3'],
                             'nvcc': []},
         include_dirs=[numpy_include]
     ),
     Extension('gpu_nms',
         ['nms_kernel.cu', 'gpu_nms.pyx'],
-        library_dirs=[CUDA['lib']],
+        library_dirs=[CUDA['lib64']],
         libraries=['cudart'],
         language='c++',
-        runtime_library_dirs=[CUDA['lib']],
-        extra_compile_args={'gcc': ["/W3", "/wd4244"],  # Disable warning for possible data loss
-                            'nvcc': ['/arch=sm_61',
+        runtime_library_dirs=[CUDA['lib64']],
+        extra_compile_args={'gcc': ['-Wno-cpp', '-Wno-unused-function'] + ['-O3'],
+                            'nvcc': ['-O3', '-arch=sm_61',
                                      '--ptxas-options=-v',
                                      '-c',
                                      '--compiler-options',
-                                     '/Zi']},
+                                     "'-fPIC'"]},
         include_dirs=[numpy_include, CUDA['include']]
     ),
 ]
@@ -106,4 +105,6 @@ setup(
     name='nms',
     ext_modules=ext_modules,
     cmdclass={'build_ext': custom_build_ext},
+    include_package_data=True,
+    zip_safe=False,
 )
