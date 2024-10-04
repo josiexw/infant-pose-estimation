@@ -23,27 +23,26 @@ def find_in_path(name, path):
 
 
 def locate_cuda():
-    """Locate the CUDA environment on the system.
-    Returns a dict with keys 'home', 'nvcc', 'include', and 'lib'.
-    """
-    if 'CUDAHOME' in os.environ:
-        home = os.environ['CUDAHOME']
-        nvcc = pjoin(home, 'bin')
-    else:
-        nvcc = find_in_path(os.environ['PATH'])
-        if nvcc is None:
-            raise EnvironmentError('The nvcc binary could not be '
-                'located in your $PATH. Either add it to your path, or set $CUDAHOME')
-        home = os.path.dirname(os.path.dirname(nvcc))
+    # First check CUDAHOME
+    cuda_home = os.environ.get('CUDAHOME') or os.environ.get('CUDA_HOME')
+    if cuda_home is None:
+        # Otherwise, search for CUDA in some common locations
+        cuda_home = '/usr/local/cuda'
+    
+    if not os.path.exists(cuda_home):
+        raise EnvironmentError('CUDA_HOME directory does not exist: ' + cuda_home)
 
-    cudaconfig = {'home': home, 'nvcc': nvcc,
-                  'include': pjoin(home, 'include'),
-                  'lib': pjoin(home, 'lib')}
-    for k, v in cudaconfig.items():
-        if not os.path.exists(v):
-            raise EnvironmentError('The CUDA %s path could not be located in %s' % (k, v))
+    nvcc = os.path.join(cuda_home, 'bin', 'nvcc')
+    if not os.path.exists(nvcc):
+        raise EnvironmentError('NVCC not found in: ' + nvcc)
 
-    return cudaconfig
+    # Set and return CUDA settings
+    return {
+        'home': cuda_home,
+        'nvcc': nvcc,
+        'include': os.path.join(cuda_home, 'include'),
+        'lib64': os.path.join(cuda_home, 'lib64')
+    }
 
 
 CUDA = locate_cuda()
